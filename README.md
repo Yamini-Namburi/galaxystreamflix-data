@@ -1,4 +1,5 @@
 Conceptual Data Model
+
 A User has many Viewing Sessions.
 A Device has many Viewing Sessions.
 Content is watched in many Viewing Sessions.
