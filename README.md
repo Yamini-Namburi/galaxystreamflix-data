@@ -34,3 +34,47 @@ dim_content is SCD2, unifying movies + TV with hierarchy fields (show → season
 dim_device is SCD1 (latest device type/OS/app_version); dim_date/time are small, static reference tables.
 
 This constellation answers KPIs via simple aggregates/joins on the facts, avoiding scans over raw events.
+
+
+
+Physical Data Model:
+
+
+
+DISTSTYLE (how data is distributed across nodes)
+
+
+dim_user + fact_viewing_session colocated on user_key
+
+- Means both tables are stored on the same Redshift slices by user_key. So when you query “watch time by user,” Redshift doesn’t have to move data around = faster joins.
+
+dim_content + fact_content_rating colocated on content_key
+- Same logic: ratings usually join with content, so we keep them on the same slices = fast lookups for popularity/ratings.
+
+Small dimensions (date, time, device) → DISTSTYLE ALL
+- These are tiny tables, so Redshift makes a copy on every node. Every join is local and cheap.
+
+
+SORTKEY (how rows are ordered on disk)
+
+fact_viewing_session → sorted by session_start_ts
+- Most queries filter by date/time (e.g., “last month’s watch sessions”). Sorting by start timestamp means Redshift only scans the blocks it needs = less data to read, faster queries.
+
+fact_content_rating → sorted by rating_date_key
+- Ratings are also analyzed by time (e.g., “ratings last quarter”), so sorting by date gives the same range-scan speedup.
+
+Dimensions sorted by their natural keys
+- e.g., user_id, content_id. This just makes joins and lookups cleaner and more efficient.
+
+
+ENCODE (compression for storage and speed)
+
+AZ64 for numeric/timestamp
+- Optimized format for numbers and dates; uses less space and is quick for aggregations.
+
+BYTEDICT for low-cardinality attributes
+- Great for columns with only a few possible values (e.g., genre, device type, is_weekend). Redshift stores them like a dictionary = very small.
+
+ZSTD for text fields
+- Best general-purpose compression for long text like titles or emails.
+
