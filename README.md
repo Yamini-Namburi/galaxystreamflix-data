@@ -1,4 +1,4 @@
-Conceptual Data Model
+Conceptual Data Model :
 
 
 A User has many Viewing Sessions.
@@ -12,7 +12,7 @@ A Viewing Session contains many Events.
 A User gives many Ratings; Content receives many Ratings.
 
 
-Logical Data Model
+Logical Data Model :
 
 
 Two business processes drive a galaxy schema: viewing and rating.
