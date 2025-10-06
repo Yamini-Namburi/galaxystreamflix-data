@@ -1,0 +1,106 @@
+CREATE SCHEMA IF NOT EXISTS streamflix;
+SET search_path TO streamflix;
+
+CREATE TABLE dim_user (
+    user_key            BIGINT IDENTITY(1,1) PRIMARY KEY,
+    user_id             VARCHAR(64) NOT NULL ENCODE ZSTD,
+    name                VARCHAR(128) NULL ENCODE ZSTD,
+    email               VARCHAR(256) NULL ENCODE ZSTD,   
+    subscription_type   VARCHAR(32) NULL ENCODE BYTEDICT,
+    region              VARCHAR(32) NULL ENCODE BYTEDICT,
+    signup_date         DATE NULL ENCODE AZ64
+)
+DISTSTYLE KEY
+DISTKEY (user_key)
+SORTKEY (user_id);
+
+CREATE TABLE dim_content (
+    content_key        BIGINT IDENTITY(1,1) PRIMARY KEY,
+    content_id         VARCHAR(64) NOT NULL ENCODE ZSTD,
+    content_type       VARCHAR(16) NOT NULL ENCODE BYTEDICT, -- Movie / Episode
+    title              VARCHAR(256) NOT NULL ENCODE ZSTD,
+    genre              VARCHAR(64) NULL ENCODE BYTEDICT,
+    parent_content_id  VARCHAR(64) NULL ENCODE ZSTD,          -- for Episode->Season->Show
+    season_number      SMALLINT NULL ENCODE AZ64,
+    episode_number     SMALLINT NULL ENCODE AZ64,
+    release_year       SMALLINT NULL ENCODE AZ64,
+    duration_seconds   INT NULL ENCODE AZ64
+)
+DISTSTYLE KEY
+DISTKEY (content_key)
+SORTKEY (content_type, parent_content_id, season_number, episode_number);
+
+CREATE TABLE dim_device (
+    device_key        BIGINT IDENTITY(1,1) PRIMARY KEY,
+    device_type       VARCHAR(16) NOT NULL ENCODE BYTEDICT,
+    operating_system  VARCHAR(64) NULL ENCODE ZSTD,
+    app_version       VARCHAR(32) NULL ENCODE ZSTD
+)
+DISTSTYLE ALL
+SORTKEY (device_type, operating_system);
+
+CREATE TABLE dim_date (
+    date_key     INT NOT NULL PRIMARY KEY,     -- e.g., 20251003
+    full_date    DATE NOT NULL ENCODE AZ64,
+    year         SMALLINT NOT NULL ENCODE AZ64,
+    quarter      SMALLINT NOT NULL ENCODE AZ64,
+    month        SMALLINT NOT NULL ENCODE AZ64,
+    day          SMALLINT NOT NULL ENCODE AZ64,
+    day_of_week  VARCHAR(9) NOT NULL ENCODE BYTEDICT,
+    is_weekend   BOOLEAN NOT NULL ENCODE BYTEDICT
+)
+DISTSTYLE ALL
+SORTKEY (full_date);
+
+CREATE TABLE dim_time_of_day (
+    time_key              INT NOT NULL PRIMARY KEY,    -- e.g., 2130 for 21:30
+    hour                  SMALLINT NOT NULL ENCODE AZ64,
+    minute                SMALLINT NOT NULL ENCODE AZ64,
+    time_of_day_segment   VARCHAR(16) NOT NULL ENCODE BYTEDICT -- Morning/Afternoon/Evening/Night
+)
+DISTSTYLE ALL
+SORTKEY (time_key);
+
+CREATE TABLE fact_viewing_session (
+    session_id              BIGINT IDENTITY(1,1) PRIMARY KEY,
+    user_key                BIGINT NOT NULL,
+    content_key             BIGINT NOT NULL,
+    device_key              BIGINT NOT NULL,
+    start_date_key          INT NOT NULL,
+    start_time_key          INT NOT NULL,
+    end_date_key            INT NULL,
+    end_time_key            INT NULL,
+    session_start_ts        TIMESTAMP NOT NULL ENCODE AZ64,
+    session_end_ts          TIMESTAMP NULL ENCODE AZ64,
+    watch_duration_seconds  INT NOT NULL ENCODE AZ64,
+    is_completed_flag       BOOLEAN NOT NULL ENCODE BYTEDICT,
+    number_of_pauses        INT NOT NULL ENCODE AZ64,
+    number_of_seeks         INT NOT NULL ENCODE AZ64,
+
+    CONSTRAINT fk_fvs_user    FOREIGN KEY (user_key)    REFERENCES dim_user(user_key),
+    CONSTRAINT fk_fvs_content FOREIGN KEY (content_key) REFERENCES dim_content(content_key),
+    CONSTRAINT fk_fvs_device  FOREIGN KEY (device_key)  REFERENCES dim_device(device_key),
+    CONSTRAINT fk_fvs_sdate   FOREIGN KEY (start_date_key) REFERENCES dim_date(date_key),
+    CONSTRAINT fk_fvs_stime   FOREIGN KEY (start_time_key) REFERENCES dim_time_of_day(time_key)
+)
+DISTSTYLE KEY
+DISTKEY (user_key)
+SORTKEY (session_start_ts);
+
+CREATE TABLE fact_content_rating (
+    rating_id        BIGINT IDENTITY(1,1) PRIMARY KEY,
+    user_key         BIGINT NOT NULL,
+    content_key      BIGINT NOT NULL,
+    rating_date_key  INT NOT NULL,
+    rating_value     SMALLINT NOT NULL ENCODE AZ64,
+
+    CONSTRAINT fk_fcr_user    FOREIGN KEY (user_key)    REFERENCES dim_user(user_key),
+    CONSTRAINT fk_fcr_content FOREIGN KEY (content_key) REFERENCES dim_content(content_key),
+    CONSTRAINT fk_fcr_date    FOREIGN KEY (rating_date_key) REFERENCES dim_date(date_key)
+)
+DISTSTYLE KEY
+DISTKEY (content_key)
+SORTKEY (rating_date_key);
+
+
+
